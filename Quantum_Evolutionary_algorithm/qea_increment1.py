@@ -10,7 +10,7 @@ from qiskit_aer import AerSimulator
 from qiskit.quantum_info import SparsePauliOp
 import itertools as it
 import numpy as np
-import time, math, matplotlib.pyplot as plt
+import time, math, sys, matplotlib.pyplot as plt
 from scipy.optimize import minimize
 
 
@@ -84,11 +84,33 @@ def build_qaoa(params, p=1):
     betas = params[p:]
 
     for layer in range(p):
-        qc.append(PauliEvolutionGate(H_cost, time=gammas[layer]), range(num_qubits))
-        qc.append(PauliEvolutionGate(H_mixer, time=betas[layer]), range(num_qubits))
+        cost_gate = PauliEvolutionGate(
+            H_cost,
+            time=gammas[layer],
+            label="Cost Uc",
+        )
+        mixer_gate = PauliEvolutionGate(
+            H_mixer,
+            time=betas[layer],
+            label="Mixer Um",
+        )
+        qc.append(cost_gate, range(num_qubits))
+        qc.append(mixer_gate, range(num_qubits))
 
     qc.measure_all()
     return qc
+
+def print_circuit_diagram(qc, title="Quantum Circuit Diagram"):
+    print(f"\n=== {title} ===")
+    print("H = superposition, Cost Uc = TSP cost phase, Mixer Um = QAOA mixing, M = measurement\n")
+    try:
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8")
+        print(qc.draw(output="text", fold=120))
+    except UnicodeEncodeError:
+        diagram = str(qc.draw(output="text", fold=120))
+        encoding = sys.stdout.encoding or "utf-8"
+        print(diagram.encode(encoding, errors="replace").decode(encoding))
 
 # ==========================================================
 # 6) Adaptive parameter tuning
@@ -120,6 +142,7 @@ print(f"[Tuning Runtime] {time.time() - start_tune:.2f}s")
 # ==========================================================
 start = time.time()
 qc = build_qaoa(opt.x, p=p_layers)
+print_circuit_diagram(qc, "QAOA TSP Circuit")
 tqc = transpile(qc, backend)
 result = backend.run(tqc, shots=2048).result()
 counts = result.get_counts()
